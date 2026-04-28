@@ -6,36 +6,48 @@ import { db } from "../lib/firebase";
 import toast from "react-hot-toast";
 
 export default function Login() {
-  const { login, userData } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
- const handleLogin = async () => {
-  if (!email || !password) {
-    toast.error("Please fill in all fields");
-    return;
-  }
-  try {
-    setLoading(true);
-    const result = await login(email, password); // ✅ save result
-    const docRef = doc(db, "users", result.user.uid);
-    const docSnap = await getDoc(docRef);
-    const role = docSnap.data()?.role;
+  const handleLogin = async () => {
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    let role = null;
+
+    try {
+      setLoading(true);
+      const result = await login(email, password);
+      const docRef = doc(db, "users", result.user.uid);
+      const docSnap = await getDoc(docRef);
+      const data = docSnap.data();
+      role = data ? data.role : null;
+    } catch (err) {
+      toast.error("Invalid email or password");
+      setLoading(false);
+      return;
+    }
 
     toast.success("Welcome back!");
-
     if (role === "admin") {
       navigate("/admin");
     } else {
       navigate("/manager");
     }
-  } catch (err) {
-    toast.error("Invalid email or password");
-  }
-  setLoading(false);
-};
+    setLoading(false);
+  };
+
+  // ✅ extracted function
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      handleLogin();
+    }
+  };
 
   const inputClass =
     "w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white text-sm outline-none focus:border-orange-500 transition placeholder:text-gray-600";
@@ -43,7 +55,6 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-10">
           <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <span className="text-white text-2xl font-bold">OS</span>
@@ -52,13 +63,10 @@ export default function Login() {
           <p className="text-gray-500 text-sm mt-1">Sign in to your account</p>
         </div>
 
-        {/* Form */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
           <div className="flex flex-col gap-4">
             <div>
-              <label className="block text-gray-400 text-xs mb-2">
-                Email Address
-              </label>
+              <label className="block text-gray-400 text-xs mb-2">Email Address</label>
               <input
                 type="email"
                 placeholder="you@example.com"
@@ -68,15 +76,13 @@ export default function Login() {
               />
             </div>
             <div>
-              <label className="block text-gray-400 text-xs mb-2">
-                Password
-              </label>
+              <label className="block text-gray-400 text-xs mb-2">Password</label>
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                onKeyDown={handleKeyDown} // ✅ extracted function
                 className={inputClass}
               />
             </div>
