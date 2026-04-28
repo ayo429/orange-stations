@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toaster } from 'react-hot-toast';
 import './App.css'
 
-import Login from './Pages/Login';
+import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminManagers from './pages/admin/Managers';
 import AdminStation from './pages/admin/Station';
