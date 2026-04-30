@@ -18,7 +18,9 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
   const gas = sub.gas ? sub.gas.toLocaleString() : "0";
   const gasQty = sub.gasQty ? sub.gasQty.toLocaleString() : "0";
   const petroleum = sub.petroleum ? sub.petroleum.toLocaleString() : "0";
-  const petroleumQty = sub.petroleumQty ? sub.petroleumQty.toLocaleString() : "0";
+  const petroleumQty = sub.petroleumQty
+    ? sub.petroleumQty.toLocaleString()
+    : "0";
   const diesel = sub.diesel ? sub.diesel.toLocaleString() : "0";
   const dieselQty = sub.dieselQty ? sub.dieselQty.toLocaleString() : "0";
   const kerosene = sub.kerosene ? sub.kerosene.toLocaleString() : "0";
@@ -26,8 +28,12 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
   const sales = sub.sales ? sub.sales.toLocaleString() : "0";
   const expenses = sub.expenses ? sub.expenses.toLocaleString() : "0";
   const photos = sub.photos ? sub.photos : [];
-  const submittedAt = sub.submittedAt ? new Date(sub.submittedAt).toLocaleString() : "N/A";
-  const clearedAt = sub.clearedAt ? new Date(sub.clearedAt).toLocaleDateString() : "";
+  const submittedAt = sub.submittedAt
+    ? new Date(sub.submittedAt).toLocaleString()
+    : "N/A";
+  const clearedAt = sub.clearedAt
+    ? new Date(sub.clearedAt).toLocaleDateString()
+    : "";
   const isCleared = sub.status === "cleared";
   const description = sub.description ? sub.description : "";
 
@@ -38,13 +44,17 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
         <div>
           <p className="text-white font-semibold">{sub.date}</p>
           <p className="text-gray-500 text-xs mt-1">Submitted {submittedAt}</p>
-          {description ? <p className="text-gray-500 text-xs mt-1">{description}</p> : null}
+          {description ? (
+            <p className="text-gray-500 text-xs mt-1">{description}</p>
+          ) : null}
         </div>
-        <span className={`text-xs px-3 py-1 rounded-full border ${
-          isCleared
-            ? "bg-green-500/15 text-green-400 border-green-500/30"
-            : "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
-        }`}>
+        <span
+          className={`text-xs px-3 py-1 rounded-full border ${
+            isCleared
+              ? "bg-green-500/15 text-green-400 border-green-500/30"
+              : "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
+          }`}
+        >
           {isCleared ? "✓ Cleared" : "⏳ Pending"}
         </span>
       </div>
@@ -140,7 +150,9 @@ function ManagerInfo({ manager }) {
       <div>
         <h1 className="text-white text-2xl font-bold">{name}</h1>
         <p className="text-gray-500 text-sm">{stationName}</p>
-        <p className="text-gray-600 text-xs">{email} • {phone}</p>
+        <p className="text-gray-600 text-xs">
+          {email} • {phone}
+        </p>
       </div>
     </div>
   );
@@ -154,6 +166,7 @@ export default function AdminStation() {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -163,7 +176,7 @@ export default function AdminStation() {
       const managerDoc = await getDoc(doc(db, "users", id));
       managerData = { id: managerDoc.id, ...managerDoc.data() };
       const snap = await getDocs(
-        query(collection(db, "submissions"), where("managerId", "==", id))
+        query(collection(db, "submissions"), where("managerId", "==", id)),
       );
       submissionsData = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     } catch (err) {
@@ -211,20 +224,25 @@ export default function AdminStation() {
   };
 
   const totalSales = submissions.reduce((acc, s) => acc + (s.sales || 0), 0);
-  const totalExpenses = submissions.reduce((acc, s) => acc + (s.expenses || 0), 0);
+  const totalExpenses = submissions.reduce(
+    (acc, s) => acc + (s.expenses || 0),
+    0,
+  );
   const pendingCount = submissions.filter((s) => s.status === "pending").length;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       {/* Navbar */}
-      <nav className="border-b border-white/5 px-4 md:px-8 py-4 flex justify-between items-center">
+      <nav className="border-b border-white/5 px-4 md:px-8 py-4 flex justify-between items-center relative">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
             <span className="text-white text-xs font-bold">OS</span>
           </div>
           <span className="text-white font-semibold">Orange Stations</span>
         </div>
-        <div className="flex items-center gap-4">
+
+        {/* Desktop */}
+        <div className="hidden md:flex items-center gap-4">
           <button
             onClick={() => navigate("/admin")}
             className="text-gray-400 text-sm hover:text-white transition"
@@ -238,22 +256,69 @@ export default function AdminStation() {
             Logout
           </button>
         </div>
+
+        {/* Mobile hamburger */}
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="md:hidden text-white text-2xl bg-transparent border-none cursor-pointer"
+        >
+          {menuOpen ? "✕" : "☰"}
+        </button>
+
+        {/* Mobile dropdown */}
+        {menuOpen && (
+          <div className="absolute top-full right-0 w-48 bg-[#111] border border-white/10 rounded-xl p-3 flex flex-col gap-2 z-50 md:hidden">
+            <button
+              onClick={() => {
+                navigate("/admin");
+                setMenuOpen(false);
+              }}
+              className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5"
+            >
+              ← Dashboard
+            </button>
+            <button
+              onClick={() => {
+                handleLogout();
+                setMenuOpen(false);
+              }}
+              className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5 border border-white/10"
+            >
+              Logout
+            </button>
+          </div>
+        )}
       </nav>
 
       <div className="px-4 md:px-8 py-8">
         {manager && <ManagerInfo manager={manager} />}
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { label: "Total Submissions", value: submissions.length, color: "text-white" },
-            { label: "Total Sales", value: `₦${totalSales.toLocaleString()}`, color: "text-green-400" },
-            { label: "Total Expenses", value: `₦${totalExpenses.toLocaleString()}`, color: "text-red-400" },
+            {
+              label: "Total Submissions",
+              value: submissions.length,
+              color: "text-white",
+            },
+            {
+              label: "Total Sales",
+              value: `₦${totalSales.toLocaleString()}`,
+              color: "text-green-400",
+            },
+            {
+              label: "Total Expenses",
+              value: `₦${totalExpenses.toLocaleString()}`,
+              color: "text-red-400",
+            },
             { label: "Pending", value: pendingCount, color: "text-yellow-400" },
           ].map((stat, i) => (
-            <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-4">
+            <div
+              key={i}
+              className="bg-white/5 border border-white/10 rounded-xl p-4"
+            >
               <p className="text-gray-500 text-xs mb-1">{stat.label}</p>
-              <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
+              <p className={`text-sm md:text-xl font-bold break-words min-w-0 ${stat.color}`}>{stat.value}</p>
             </div>
           ))}
         </div>
