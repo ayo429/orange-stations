@@ -12,8 +12,14 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
 import toast from "react-hot-toast";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  fadeUp,
+  staggerContainer,
+  staggerItem,
+  slideDown,
+} from "../../lib/animation";
 
-// ✅ Helper component for each submission
 function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
   const gas = sub.gas ? sub.gas.toLocaleString() : "0";
   const gasQty = sub.gasQty ? sub.gasQty.toLocaleString() : "0";
@@ -38,28 +44,26 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
   const description = sub.description ? sub.description : "";
 
   return (
-    <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-      {/* Header */}
-      <div className="flex justify-between items-start mb-4">
-        <div>
+    <motion.div
+      variants={staggerItem}
+      whileHover={{ scale: 1.01 }}
+      className="bg-white/5 border border-white/10 rounded-xl p-5"
+    >
+      <div className="flex flex-col gap-2 mb-3">
+        <div className="flex justify-between items-center gap-2">
           <p className="text-white font-semibold">{sub.date}</p>
-          <p className="text-gray-500 text-xs mt-1">Submitted {submittedAt}</p>
-          {description ? (
-            <p className="text-gray-500 text-xs mt-1">{description}</p>
-          ) : null}
+          <span
+            className={`text-xs px-3 py-1 rounded-full border shrink-0 ${
+              isCleared
+                ? "bg-green-500/15 text-green-400 border-green-500/30"
+                : "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
+            }`}
+          >
+            {isCleared ? "✓ Cleared" : "⏳ Pending"}
+          </span>
         </div>
-        <span
-          className={`text-xs px-3 py-1 rounded-full border ${
-            isCleared
-              ? "bg-green-500/15 text-green-400 border-green-500/30"
-              : "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
-          }`}
-        >
-          {isCleared ? "✓ Cleared" : "⏳ Pending"}
-        </span>
+        <p className="text-gray-500 text-xs">{description}</p>
       </div>
-
-      {/* Product Breakdown */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
           <p className="text-gray-500 text-xs mb-1">Gas</p>
@@ -90,15 +94,14 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
           <p className="text-red-400 font-bold text-sm">₦{expenses}</p>
         </div>
       </div>
-
-      {/* Photos */}
       {photos.length > 0 && (
         <div className="mb-4">
           <p className="text-gray-500 text-xs mb-2">Photos</p>
           <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
             {photos.map((url, i) => (
-              <img
+              <motion.img
                 key={i}
+                whileHover={{ scale: 1.05 }}
                 src={url}
                 alt={`photo ${i + 1}`}
                 onClick={() => onPhotoClick(url)}
@@ -108,53 +111,58 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
           </div>
         </div>
       )}
-
-      {/* Clear Button */}
       <div className="flex justify-end">
         {isCleared ? (
           <div className="flex items-center gap-3">
             <p className="text-gray-600 text-xs">Cleared {clearedAt}</p>
-            <button
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => onUnclear(sub.id)}
               className="bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 px-4 py-2 rounded-lg text-xs font-medium hover:bg-yellow-500/25 transition"
             >
               ↩ Mark as Pending
-            </button>
+            </motion.button>
           </div>
         ) : (
-          <button
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
             onClick={() => onClear(sub.id)}
             className="bg-green-500/15 text-green-400 border border-green-500/30 px-4 py-2 rounded-lg text-xs font-medium hover:bg-green-500/25 transition"
           >
             ✓ Mark as Cleared
-          </button>
+          </motion.button>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
-// ✅ Helper component for manager info
 function ManagerInfo({ manager }) {
-  const firstLetter = manager.name ? manager.name.charAt(0).toUpperCase() : "?";
-  const name = manager.name ? manager.name : "";
-  const stationName = manager.stationName ? manager.stationName : "";
-  const email = manager.email ? manager.email : "";
-  const phone = manager.phone ? manager.phone : "";
-
   return (
-    <div className="flex items-center gap-4 mb-8">
-      <div className="w-14 h-14 bg-orange-500/20 rounded-full flex items-center justify-center">
-        <span className="text-orange-500 text-xl font-bold">{firstLetter}</span>
-      </div>
+    <motion.div
+      variants={fadeUp}
+      initial="hidden"
+      animate="show"
+      className="flex items-center gap-4 mb-8"
+    >
+      <motion.div
+        whileHover={{ rotate: 10, scale: 1.1 }}
+        className="w-14 h-14 bg-orange-500/20 rounded-full flex items-center justify-center"
+      >
+        <span className="text-orange-500 text-xl font-bold">
+          {manager.name?.charAt(0).toUpperCase()}
+        </span>
+      </motion.div>
       <div>
-        <h1 className="text-white text-2xl font-bold">{name}</h1>
-        <p className="text-gray-500 text-sm">{stationName}</p>
+        <h1 className="text-white text-2xl font-bold">{manager.name}</h1>
+        <p className="text-gray-500 text-sm">{manager.stationName}</p>
         <p className="text-gray-600 text-xs">
-          {email} • {phone}
+          {manager.email} • {manager.phone}
         </p>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -170,21 +178,22 @@ export default function AdminStation() {
 
   const fetchData = async () => {
     setLoading(true);
-    let managerData = null;
-    let submissionsData = [];
     try {
       const managerDoc = await getDoc(doc(db, "users", id));
-      managerData = { id: managerDoc.id, ...managerDoc.data() };
+      const managerData = { id: managerDoc.id, ...managerDoc.data() };
       const snap = await getDocs(
         query(collection(db, "submissions"), where("managerId", "==", id)),
       );
-      submissionsData = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const submissionsData = snap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      submissionsData.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setManager(managerData);
+      setSubmissions(submissionsData);
     } catch (err) {
       toast.error("Failed to load data");
     }
-    submissionsData.sort((a, b) => new Date(b.date) - new Date(a.date));
-    setManager(managerData);
-    setSubmissions(submissionsData);
     setLoading(false);
   };
 
@@ -233,15 +242,22 @@ export default function AdminStation() {
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       {/* Navbar */}
-      <nav className="border-b border-white/5 px-4 md:px-8 py-4 flex justify-between items-center relative">
+      <motion.nav
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="border-b border-white/5 px-4 md:px-8 py-4 flex justify-between items-center relative"
+      >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
+          <motion.div
+            whileHover={{ rotate: 10, scale: 1.1 }}
+            className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center"
+          >
             <span className="text-white text-xs font-bold">OS</span>
-          </div>
+          </motion.div>
           <span className="text-white font-semibold">Orange Stations</span>
         </div>
 
-        {/* Desktop */}
         <div className="hidden md:flex items-center gap-4">
           <button
             onClick={() => navigate("/admin")}
@@ -257,7 +273,6 @@ export default function AdminStation() {
           </button>
         </div>
 
-        {/* Mobile hamburger */}
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="md:hidden text-white text-2xl bg-transparent border-none cursor-pointer"
@@ -265,36 +280,48 @@ export default function AdminStation() {
           {menuOpen ? "✕" : "☰"}
         </button>
 
-        {/* Mobile dropdown */}
-        {menuOpen && (
-          <div className="absolute top-full right-0 w-48 bg-[#111] border border-white/10 rounded-xl p-3 flex flex-col gap-2 z-50 md:hidden">
-            <button
-              onClick={() => {
-                navigate("/admin");
-                setMenuOpen(false);
-              }}
-              className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5"
+        <AnimatePresence>
+          {menuOpen && (
+            <motion.div
+              variants={slideDown}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="absolute top-full right-0 w-48 bg-[#111] border border-white/10 rounded-xl p-3 flex flex-col gap-2 z-50 md:hidden"
             >
-              ← Dashboard
-            </button>
-            <button
-              onClick={() => {
-                handleLogout();
-                setMenuOpen(false);
-              }}
-              className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5 border border-white/10"
-            >
-              Logout
-            </button>
-          </div>
-        )}
-      </nav>
+              <button
+                onClick={() => {
+                  navigate("/admin");
+                  setMenuOpen(false);
+                }}
+                className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5"
+              >
+                ← Dashboard
+              </button>
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setMenuOpen(false);
+                }}
+                className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5 border border-white/10"
+              >
+                Logout
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.nav>
 
       <div className="px-4 md:px-8 py-8">
         {manager && <ManagerInfo manager={manager} />}
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
+        >
           {[
             {
               label: "Total Submissions",
@@ -313,27 +340,49 @@ export default function AdminStation() {
             },
             { label: "Pending", value: pendingCount, color: "text-yellow-400" },
           ].map((stat, i) => (
-            <div
+            <motion.div
               key={i}
+              variants={staggerItem}
+              whileHover={{ scale: 1.03, y: -4 }}
               className="bg-white/5 border border-white/10 rounded-xl p-4"
             >
               <p className="text-gray-500 text-xs mb-1">{stat.label}</p>
-              <p className={`text-sm md:text-xl font-bold break-words min-w-0 ${stat.color}`}>{stat.value}</p>
-            </div>
+              <p
+                className={`text-base md:text-xl font-bold break-words min-w-0 ${stat.color}`}
+              >
+                {stat.value}
+              </p>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
 
         {/* Submissions */}
-        <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+        <motion.div
+          variants={fadeUp}
+          initial="hidden"
+          animate="show"
+          className="bg-white/5 border border-white/10 rounded-xl p-6"
+        >
           <h2 className="text-white font-semibold mb-6">
             Submissions ({submissions.length})
           </h2>
           {loading ? (
-            <p className="text-gray-500 text-sm">Loading...</p>
+            <motion.p
+              animate={{ opacity: [0.4, 1, 0.4] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              className="text-gray-500 text-sm"
+            >
+              Loading...
+            </motion.p>
           ) : submissions.length === 0 ? (
             <p className="text-gray-500 text-sm">No submissions yet</p>
           ) : (
-            <div className="flex flex-col gap-4">
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              animate="show"
+              className="flex flex-col gap-4"
+            >
               {submissions.map((sub) => (
                 <SubmissionCard
                   key={sub.id}
@@ -343,24 +392,32 @@ export default function AdminStation() {
                   onPhotoClick={setSelectedPhoto}
                 />
               ))}
-            </div>
+            </motion.div>
           )}
-        </div>
+        </motion.div>
       </div>
 
       {/* Photo Modal */}
-      {selectedPhoto && (
-        <div
-          className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 px-4"
-          onClick={() => setSelectedPhoto(null)}
-        >
-          <img
-            src={selectedPhoto}
-            alt="Full size"
-            className="max-w-full max-h-[90vh] rounded-xl object-contain"
-          />
-        </div>
-      )}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 px-4"
+            onClick={() => setSelectedPhoto(null)}
+          >
+            <motion.img
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              src={selectedPhoto}
+              alt="Full size"
+              className="max-w-full max-h-[90vh] rounded-xl object-contain"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

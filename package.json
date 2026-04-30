@@ -15,6 +15,7 @@
     "chart.js": "^4.5.1",
     "cloudinary": "^2.10.0",
     "firebase": "^12.12.1",
+    "framer-motion": "^12.38.0",
     "react": "^19.2.5",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.5",
