@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import {
   collection,
   getDocs,
+  onSnapshot,
   query,
   where,
   doc,
@@ -13,8 +14,8 @@ import {
 import { db } from "../../lib/firebase";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { SkeletonCard, SkeletonRow } from "../../components/Skeleton";
 
-// Animation variants
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   show: { opacity: 1, y: 0, transition: { duration: 0.4 } },
@@ -22,10 +23,7 @@ const fadeUp = {
 
 const staggerContainer = {
   hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
+  show: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
 const staggerItem = {
@@ -33,7 +31,6 @@ const staggerItem = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
-// ✅ CountUp hook
 function useCountUp(target, duration = 1500) {
   const [count, setCount] = useState(0);
 
@@ -61,7 +58,6 @@ function useCountUp(target, duration = 1500) {
   return count;
 }
 
-// ✅ StatCard component
 function StatCard({ label, value, prefix = "", color }) {
   const animated = useCountUp(typeof value === "number" ? value : 0);
   const display = typeof value === "number"
@@ -88,38 +84,46 @@ export default function AdminDashboard() {
   const [managers, setManagers] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [managersLoading, setManagersLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const fetchData = async () => {
-    setLoading(true);
+  // ✅ Fetch managers once
+  const fetchManagers = async () => {
+    setManagersLoading(true);
+    let managersData = [];
     try {
       const managersSnap = await getDocs(
         query(collection(db, "users"), where("role", "==", "manager"))
       );
-      const managersData = managersSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setManagers(managersData);
-
-      const submissionsSnap = await getDocs(collection(db, "submissions"));
-      const submissionsData = submissionsSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setSubmissions(submissionsData);
-
-      await autoArchive(submissionsData);
+      managersData = managersSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     } catch (err) {
-      toast.error("Failed to load data");
+      toast.error("Failed to load managers");
     }
-    setLoading(false);
+    setManagers(managersData);
+    setManagersLoading(false);
   };
 
+  // ✅ Real-time listener for submissions
   useEffect(() => {
-    fetchData();
+    fetchManagers();
+
+    const unsubscribe = onSnapshot(
+      collection(db, "submissions"),
+      (snap) => {
+        const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        setSubmissions(data);
+        autoArchive(data);
+        setLoading(false);
+      },
+      (err) => {
+        toast.error("Failed to load submissions");
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
 
   const autoArchive = async (submissionsData) => {
@@ -174,13 +178,11 @@ export default function AdminDashboard() {
         await deleteDoc(doc(db, "archive", document.id));
       }
       toast.success("All submissions cleared!");
-      setSubmissions([]);
     } catch (err) {
       toast.error("Failed to clear submissions");
     }
     setClearing(false);
     setShowClearModal(false);
-    fetchData();
   };
 
   const handleLogout = async () => {
@@ -191,6 +193,7 @@ export default function AdminDashboard() {
   const totalSales = submissions.reduce((acc, s) => acc + (s.sales || 0), 0);
   const totalExpenses = submissions.reduce((acc, s) => acc + (s.expenses || 0), 0);
   const pendingCount = submissions.filter((s) => s.status === "pending").length;
+  const userName = userData ? userData.name : "";
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -211,11 +214,8 @@ export default function AdminDashboard() {
           <span className="text-white font-semibold">Orange Stations</span>
         </div>
 
-        {/* Desktop */}
         <div className="hidden md:flex items-center gap-4">
-          <span className="text-gray-400 text-sm">
-            Welcome, {userData?.name}
-          </span>
+          <span className="text-gray-400 text-sm">Welcome, {userName}</span>
           <button
             onClick={handleLogout}
             className="text-gray-400 text-sm border border-white/10 px-3 py-1.5 rounded-lg hover:text-white transition"
@@ -224,7 +224,6 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* Mobile hamburger */}
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="md:hidden text-white text-2xl bg-transparent border-none cursor-pointer"
@@ -232,7 +231,6 @@ export default function AdminDashboard() {
           {menuOpen ? "✕" : "☰"}
         </button>
 
-        {/* Mobile dropdown */}
         <AnimatePresence>
           {menuOpen && (
             <motion.div
@@ -242,9 +240,7 @@ export default function AdminDashboard() {
               transition={{ duration: 0.2 }}
               className="absolute top-full right-0 w-48 bg-[#111] border border-white/10 rounded-xl p-3 flex flex-col gap-2 z-50 md:hidden"
             >
-              <p className="text-gray-500 text-xs px-3 py-1">
-                Welcome, {userData?.name}
-              </p>
+              <p className="text-gray-500 text-xs px-3 py-1">Welcome, {userName}</p>
               <button
                 onClick={() => { handleLogout(); setMenuOpen(false); }}
                 className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5 border border-white/10"
@@ -278,18 +274,24 @@ export default function AdminDashboard() {
           </motion.button>
         </motion.div>
 
-        {/* ✅ Stats with countup */}
-        <motion.div
-          variants={staggerContainer}
-          initial="hidden"
-          animate="show"
-          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8"
-        >
-          <StatCard label="Total Stations" value={managers.length} color="text-orange-500" />
-          <StatCard label="Total Sales" value={totalSales} prefix="₦" color="text-green-400" />
-          <StatCard label="Total Expenses" value={totalExpenses} prefix="₦" color="text-red-400" />
-          <StatCard label="Pending Reviews" value={pendingCount} color="text-yellow-400" />
-        </motion.div>
+        {/* Stats */}
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : (
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8"
+          >
+            <StatCard label="Total Stations" value={managers.length} color="text-orange-500" />
+            <StatCard label="Total Sales" value={totalSales} prefix="₦" color="text-green-400" />
+            <StatCard label="Total Expenses" value={totalExpenses} prefix="₦" color="text-red-400" />
+            <StatCard label="Pending Reviews" value={pendingCount} color="text-yellow-400" />
+          </motion.div>
+        )}
 
         {/* Navigation Cards */}
         <motion.div
@@ -325,13 +327,10 @@ export default function AdminDashboard() {
           className="bg-white/5 border border-white/10 rounded-xl p-6"
         >
           <h2 className="text-white font-semibold mb-6">All Stations</h2>
-          {loading ? (
-            <motion.div
-              animate={{ opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            >
-              <p className="text-gray-500 text-sm">Loading...</p>
-            </motion.div>
+          {managersLoading ? (
+            <div className="flex flex-col gap-3">
+              {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
+            </div>
           ) : managers.length === 0 ? (
             <p className="text-gray-500 text-sm">No managers added yet</p>
           ) : (
@@ -364,16 +363,12 @@ export default function AdminDashboard() {
                         className="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center shrink-0"
                       >
                         <span className="text-orange-500 text-sm font-bold">
-                          {manager.name?.charAt(0).toUpperCase()}
+                          {manager.name ? manager.name.charAt(0).toUpperCase() : "?"}
                         </span>
                       </motion.div>
                       <div className="min-w-0">
-                        <p className="text-white text-sm font-semibold truncate">
-                          {manager.name}
-                        </p>
-                        <p className="text-gray-500 text-xs truncate">
-                          {manager.stationName}
-                        </p>
+                        <p className="text-white text-sm font-semibold truncate">{manager.name}</p>
+                        <p className="text-gray-500 text-xs truncate">{manager.stationName}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
@@ -420,9 +415,7 @@ export default function AdminDashboard() {
               </p>
               <div className="flex flex-col gap-3 mb-6">
                 <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                  <h3 className="text-white text-sm font-semibold mb-1">
-                    Clear Archived Submissions
-                  </h3>
+                  <h3 className="text-white text-sm font-semibold mb-1">Clear Archived Submissions</h3>
                   <p className="text-gray-500 text-xs mb-3">
                     Deletes submissions older than 3 months that have been archived. Current submissions are kept.
                   </p>
@@ -437,9 +430,7 @@ export default function AdminDashboard() {
                   </motion.button>
                 </div>
                 <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
-                  <h3 className="text-red-400 text-sm font-semibold mb-1">
-                    Clear All Submissions
-                  </h3>
+                  <h3 className="text-red-400 text-sm font-semibold mb-1">Clear All Submissions</h3>
                   <p className="text-gray-500 text-xs mb-3">
                     Permanently deletes ALL submissions including current ones. This cannot be undone!
                   </p>

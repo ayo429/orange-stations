@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { db } from "../../lib/firebase";
 import {
   collection,
-  getDocs,
+  onSnapshot,
   query,
   where,
   doc,
@@ -19,14 +19,13 @@ import {
   staggerItem,
   slideDown,
 } from "../../lib/animation";
+import { SkeletonCard, SkeletonSubmission } from "../../components/Skeleton";
 
 function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
   const gas = sub.gas ? sub.gas.toLocaleString() : "0";
   const gasQty = sub.gasQty ? sub.gasQty.toLocaleString() : "0";
   const petroleum = sub.petroleum ? sub.petroleum.toLocaleString() : "0";
-  const petroleumQty = sub.petroleumQty
-    ? sub.petroleumQty.toLocaleString()
-    : "0";
+  const petroleumQty = sub.petroleumQty ? sub.petroleumQty.toLocaleString() : "0";
   const diesel = sub.diesel ? sub.diesel.toLocaleString() : "0";
   const dieselQty = sub.dieselQty ? sub.dieselQty.toLocaleString() : "0";
   const kerosene = sub.kerosene ? sub.kerosene.toLocaleString() : "0";
@@ -34,12 +33,8 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
   const sales = sub.sales ? sub.sales.toLocaleString() : "0";
   const expenses = sub.expenses ? sub.expenses.toLocaleString() : "0";
   const photos = sub.photos ? sub.photos : [];
-  const submittedAt = sub.submittedAt
-    ? new Date(sub.submittedAt).toLocaleString()
-    : "N/A";
-  const clearedAt = sub.clearedAt
-    ? new Date(sub.clearedAt).toLocaleDateString()
-    : "";
+  const submittedAt = sub.submittedAt ? new Date(sub.submittedAt).toLocaleString() : "N/A";
+  const clearedAt = sub.clearedAt ? new Date(sub.clearedAt).toLocaleDateString() : "";
   const isCleared = sub.status === "cleared";
   const description = sub.description ? sub.description : "";
 
@@ -52,18 +47,18 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
       <div className="flex flex-col gap-2 mb-3">
         <div className="flex justify-between items-center gap-2">
           <p className="text-white font-semibold">{sub.date}</p>
-          <span
-            className={`text-xs px-3 py-1 rounded-full border shrink-0 ${
-              isCleared
-                ? "bg-green-500/15 text-green-400 border-green-500/30"
-                : "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
-            }`}
-          >
+          <span className={`text-xs px-3 py-1 rounded-full border shrink-0 ${
+            isCleared
+              ? "bg-green-500/15 text-green-400 border-green-500/30"
+              : "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
+          }`}>
             {isCleared ? "✓ Cleared" : "⏳ Pending"}
           </span>
         </div>
-        <p className="text-gray-500 text-xs">{description}</p>
+        {description ? <p className="text-gray-500 text-xs">{description}</p> : null}
+        <p className="text-gray-600 text-xs">Submitted {submittedAt}</p>
       </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
           <p className="text-gray-500 text-xs mb-1">Gas</p>
@@ -94,6 +89,7 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
           <p className="text-red-400 font-bold text-sm">₦{expenses}</p>
         </div>
       </div>
+
       {photos.length > 0 && (
         <div className="mb-4">
           <p className="text-gray-500 text-xs mb-2">Photos</p>
@@ -111,6 +107,7 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
           </div>
         </div>
       )}
+
       <div className="flex justify-end">
         {isCleared ? (
           <div className="flex items-center gap-3">
@@ -140,6 +137,12 @@ function SubmissionCard({ sub, onClear, onUnclear, onPhotoClick }) {
 }
 
 function ManagerInfo({ manager }) {
+  const firstLetter = manager.name ? manager.name.charAt(0).toUpperCase() : "?";
+  const name = manager.name ? manager.name : "";
+  const stationName = manager.stationName ? manager.stationName : "";
+  const email = manager.email ? manager.email : "";
+  const phone = manager.phone ? manager.phone : "";
+
   return (
     <motion.div
       variants={fadeUp}
@@ -151,17 +154,62 @@ function ManagerInfo({ manager }) {
         whileHover={{ rotate: 10, scale: 1.1 }}
         className="w-14 h-14 bg-orange-500/20 rounded-full flex items-center justify-center"
       >
-        <span className="text-orange-500 text-xl font-bold">
-          {manager.name?.charAt(0).toUpperCase()}
-        </span>
+        <span className="text-orange-500 text-xl font-bold">{firstLetter}</span>
       </motion.div>
       <div>
-        <h1 className="text-white text-2xl font-bold">{manager.name}</h1>
-        <p className="text-gray-500 text-sm">{manager.stationName}</p>
-        <p className="text-gray-600 text-xs">
-          {manager.email} • {manager.phone}
-        </p>
+        <h1 className="text-white text-2xl font-bold">{name}</h1>
+        <p className="text-gray-500 text-sm">{stationName}</p>
+        <p className="text-gray-600 text-xs">{email} • {phone}</p>
       </div>
+    </motion.div>
+  );
+}
+
+// ✅ CountUp hook
+function useCountUp(target, duration = 1500) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (target === 0) {
+      setCount(0);
+      return;
+    }
+    const steps = 60;
+    const increment = target / steps;
+    const interval = duration / steps;
+    let current = 0;
+    const timer = setInterval(() => {
+      current += increment;
+      if (current >= target) {
+        setCount(target);
+        clearInterval(timer);
+      } else {
+        setCount(Math.floor(current));
+      }
+    }, interval);
+    return () => clearInterval(timer);
+  }, [target, duration]);
+
+  return count;
+}
+
+// ✅ StatCard
+function StatCard({ label, value, prefix = "", color }) {
+  const animated = useCountUp(typeof value === "number" ? value : 0);
+  const display = typeof value === "number"
+    ? `${prefix}${animated.toLocaleString()}`
+    : value;
+
+  return (
+    <motion.div
+      variants={staggerItem}
+      whileHover={{ scale: 1.03, y: -4 }}
+      className="bg-white/5 border border-white/10 rounded-xl p-4"
+    >
+      <p className="text-gray-500 text-xs mb-1">{label}</p>
+      <p className={`text-base md:text-xl font-bold break-words min-w-0 ${color}`}>
+        {display}
+      </p>
     </motion.div>
   );
 }
@@ -173,32 +221,44 @@ export default function AdminStation() {
   const [manager, setManager] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [managerLoading, setManagerLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const managerDoc = await getDoc(doc(db, "users", id));
-      const managerData = { id: managerDoc.id, ...managerDoc.data() };
-      const snap = await getDocs(
-        query(collection(db, "submissions"), where("managerId", "==", id)),
-      );
-      const submissionsData = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      submissionsData.sort((a, b) => new Date(b.date) - new Date(a.date));
-      setManager(managerData);
-      setSubmissions(submissionsData);
-    } catch (err) {
-      toast.error("Failed to load data");
-    }
-    setLoading(false);
-  };
-
+  // ✅ Fetch manager details once
   useEffect(() => {
-    fetchData();
+    const fetchManager = async () => {
+      setManagerLoading(true);
+      let managerData = null;
+      try {
+        const managerDoc = await getDoc(doc(db, "users", id));
+        managerData = { id: managerDoc.id, ...managerDoc.data() };
+      } catch (err) {
+        toast.error("Failed to load manager");
+      }
+      setManager(managerData);
+      setManagerLoading(false);
+    };
+    fetchManager();
+  }, [id]);
+
+  // ✅ Real-time listener for submissions
+  useEffect(() => {
+    setLoading(true);
+    const unsubscribe = onSnapshot(
+      query(collection(db, "submissions"), where("managerId", "==", id)),
+      (snap) => {
+        const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        data.sort((a, b) => new Date(b.date) - new Date(a.date));
+        setSubmissions(data);
+        setLoading(false);
+      },
+      (err) => {
+        toast.error("Failed to load submissions");
+        setLoading(false);
+      }
+    );
+    return () => unsubscribe();
   }, [id]);
 
   const handleClear = async (submissionId) => {
@@ -208,7 +268,6 @@ export default function AdminStation() {
         clearedAt: new Date().toISOString(),
       });
       toast.success("Submission cleared!");
-      fetchData();
     } catch (err) {
       toast.error("Failed to clear submission");
     }
@@ -221,7 +280,6 @@ export default function AdminStation() {
         clearedAt: null,
       });
       toast.success("Submission marked as pending");
-      fetchData();
     } catch (err) {
       toast.error("Failed to update submission");
     }
@@ -233,10 +291,7 @@ export default function AdminStation() {
   };
 
   const totalSales = submissions.reduce((acc, s) => acc + (s.sales || 0), 0);
-  const totalExpenses = submissions.reduce(
-    (acc, s) => acc + (s.expenses || 0),
-    0,
-  );
+  const totalExpenses = submissions.reduce((acc, s) => acc + (s.expenses || 0), 0);
   const pendingCount = submissions.filter((s) => s.status === "pending").length;
 
   return (
@@ -290,19 +345,13 @@ export default function AdminStation() {
               className="absolute top-full right-0 w-48 bg-[#111] border border-white/10 rounded-xl p-3 flex flex-col gap-2 z-50 md:hidden"
             >
               <button
-                onClick={() => {
-                  navigate("/admin");
-                  setMenuOpen(false);
-                }}
+                onClick={() => { navigate("/admin"); setMenuOpen(false); }}
                 className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5"
               >
                 ← Dashboard
               </button>
               <button
-                onClick={() => {
-                  handleLogout();
-                  setMenuOpen(false);
-                }}
+                onClick={() => { handleLogout(); setMenuOpen(false); }}
                 className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5 border border-white/10"
               >
                 Logout
@@ -313,48 +362,38 @@ export default function AdminStation() {
       </motion.nav>
 
       <div className="px-4 md:px-8 py-8">
-        {manager && <ManagerInfo manager={manager} />}
+        {/* Manager Info */}
+        {managerLoading ? (
+          <div className="flex items-center gap-4 mb-8 animate-pulse">
+            <div className="w-14 h-14 bg-white/10 rounded-full shrink-0" />
+            <div>
+              <div className="h-5 bg-white/10 rounded w-32 mb-2" />
+              <div className="h-3 bg-white/10 rounded w-24 mb-1" />
+              <div className="h-3 bg-white/10 rounded w-40" />
+            </div>
+          </div>
+        ) : (
+          manager && <ManagerInfo manager={manager} />
+        )}
 
         {/* Stats */}
-        <motion.div
-          variants={staggerContainer}
-          initial="hidden"
-          animate="show"
-          className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
-        >
-          {[
-            {
-              label: "Total Submissions",
-              value: submissions.length,
-              color: "text-white",
-            },
-            {
-              label: "Total Sales",
-              value: `₦${totalSales.toLocaleString()}`,
-              color: "text-green-400",
-            },
-            {
-              label: "Total Expenses",
-              value: `₦${totalExpenses.toLocaleString()}`,
-              color: "text-red-400",
-            },
-            { label: "Pending", value: pendingCount, color: "text-yellow-400" },
-          ].map((stat, i) => (
-            <motion.div
-              key={i}
-              variants={staggerItem}
-              whileHover={{ scale: 1.03, y: -4 }}
-              className="bg-white/5 border border-white/10 rounded-xl p-4"
-            >
-              <p className="text-gray-500 text-xs mb-1">{stat.label}</p>
-              <p
-                className={`text-base md:text-xl font-bold break-words min-w-0 ${stat.color}`}
-              >
-                {stat.value}
-              </p>
-            </motion.div>
-          ))}
-        </motion.div>
+        {loading ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : (
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
+          >
+            <StatCard label="Total Submissions" value={submissions.length} color="text-white" />
+            <StatCard label="Total Sales" value={totalSales} prefix="₦" color="text-green-400" />
+            <StatCard label="Total Expenses" value={totalExpenses} prefix="₦" color="text-red-400" />
+            <StatCard label="Pending" value={pendingCount} color="text-yellow-400" />
+          </motion.div>
+        )}
 
         {/* Submissions */}
         <motion.div
@@ -367,13 +406,9 @@ export default function AdminStation() {
             Submissions ({submissions.length})
           </h2>
           {loading ? (
-            <motion.p
-              animate={{ opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="text-gray-500 text-sm"
-            >
-              Loading...
-            </motion.p>
+            <div className="flex flex-col gap-4">
+              {[1, 2, 3].map((i) => <SkeletonSubmission key={i} />)}
+            </div>
           ) : submissions.length === 0 ? (
             <p className="text-gray-500 text-sm">No submissions yet</p>
           ) : (
