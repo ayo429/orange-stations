@@ -2,17 +2,59 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../lib/firebase";
-import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  where,
+} from "firebase/firestore";
 import toast from "react-hot-toast";
+import { motion, AnimatePresence } from "framer-motion";
 
 const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.1 } },
+};
+
+const staggerItem = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+};
+
+// ✅ 11am business day helpers
+const getBusinessDayStart = () => {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(11, 0, 0, 0);
+  if (now < start) {
+    start.setDate(start.getDate() - 1);
+  }
+  return start;
+};
+
+const getPreviousBusinessDayStart = () => {
+  const current = getBusinessDayStart();
+  const prev = new Date(current);
+  prev.setDate(prev.getDate() - 1);
+  return prev;
+};
 
 function SubmissionCard({ sub }) {
   const gas = sub.gas ? sub.gas.toLocaleString() : "0";
   const gasQty = sub.gasQty ? sub.gasQty.toLocaleString() : "0";
   const petroleum = sub.petroleum ? sub.petroleum.toLocaleString() : "0";
-  const petroleumQty = sub.petroleumQty ? sub.petroleumQty.toLocaleString() : "0";
+  const petroleumQty = sub.petroleumQty
+    ? sub.petroleumQty.toLocaleString()
+    : "0";
   const diesel = sub.diesel ? sub.diesel.toLocaleString() : "0";
   const dieselQty = sub.dieselQty ? sub.dieselQty.toLocaleString() : "0";
   const kerosene = sub.kerosene ? sub.kerosene.toLocaleString() : "0";
@@ -21,21 +63,26 @@ function SubmissionCard({ sub }) {
   const expenses = sub.expenses ? sub.expenses.toLocaleString() : "0";
   const description = sub.description ? sub.description : "No description";
   const photos = sub.photos ? sub.photos : [];
-  const isCleared = sub.status === "cleared";
 
   return (
-    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+    <motion.div
+      variants={staggerItem}
+      whileHover={{ scale: 1.01 }}
+      className="bg-white/5 border border-white/10 rounded-xl p-4"
+    >
       <div className="flex justify-between items-start mb-3">
         <div>
           <p className="text-white font-semibold">{sub.date}</p>
           <p className="text-gray-500 text-xs mt-1">{description}</p>
         </div>
-        <span className={`text-xs px-3 py-1 rounded-full border ${
-          isCleared
-            ? "bg-green-500/15 text-green-400 border-green-500/30"
-            : "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
-        }`}>
-          {isCleared ? "✓ Cleared" : "⏳ Pending"}
+        <span
+          className={`text-xs px-3 py-1 rounded-full border shrink-0 ${
+            sub.status === "cleared"
+              ? "bg-green-500/15 text-green-400 border-green-500/30"
+              : "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
+          }`}
+        >
+          {sub.status === "cleared" ? "✓ Cleared" : "⏳ Pending"}
         </span>
       </div>
 
@@ -73,11 +120,16 @@ function SubmissionCard({ sub }) {
       {photos.length > 0 && (
         <div className="grid grid-cols-4 gap-2 mt-3">
           {photos.map((url, i) => (
-            <img key={i} src={url} alt={`photo ${i + 1}`} className="w-full h-16 object-cover rounded-lg" />
+            <img
+              key={i}
+              src={url}
+              alt={`photo ${i + 1}`}
+              className="w-full h-16 object-cover rounded-lg"
+            />
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -88,6 +140,7 @@ export default function ManagerDashboard() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [form, setForm] = useState({
     date: new Date().toISOString().split("T")[0],
     gas: "",
@@ -103,21 +156,27 @@ export default function ManagerDashboard() {
     photos: [],
   });
 
-  const fetchSubmissions = async () => {
-    setLoading(true);
-    let data = [];
-    try {
-      const snap = await getDocs(
-        query(collection(db, "submissions"), where("managerId", "==", user.uid))
-      );
-      data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    } catch (err) {
-      toast.error("Failed to load submissions");
-    }
-    data.sort((a, b) => new Date(b.date) - new Date(a.date));
-    setSubmissions(data);
-    setLoading(false);
-  };
+  // ✅ Real-time snapshot
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      query(collection(db, "submissions"), where("managerId", "==", user.uid)),
+      (snap) => {
+        const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        console.log(
+          "Submissions from Firestore:",
+          data.map((s) => s.id),
+        );
+        data.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+        setSubmissions(data);
+        setLoading(false);
+      },
+      (err) => {
+        toast.error("Failed to load submissions");
+        setLoading(false);
+      },
+    );
+    return () => unsubscribe();
+  }, [user.uid]);
 
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -129,7 +188,10 @@ export default function ManagerDashboard() {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("upload_preset", UPLOAD_PRESET);
-        const res = await fetch(CLOUDINARY_URL, { method: "POST", body: formData });
+        const res = await fetch(CLOUDINARY_URL, {
+          method: "POST",
+          body: formData,
+        });
         const data = await res.json();
         return data.secure_url;
       });
@@ -145,12 +207,12 @@ export default function ManagerDashboard() {
   };
 
   const handleSubmit = async () => {
-    const hasAnySales = form.gas || form.petroleum || form.diesel || form.kerosene;
+    const hasAnySales =
+      form.gas || form.petroleum || form.diesel || form.kerosene;
     if (!form.date || !hasAnySales) {
       toast.error("Please fill in date and at least one sales field");
       return;
     }
-    // ✅ try block wraps the addDoc call
     try {
       const gas = Number(form.gas);
       const petroleum = Number(form.petroleum);
@@ -181,7 +243,6 @@ export default function ManagerDashboard() {
       });
 
       toast.success("Report submitted successfully!");
-      // ✅ reset includes all new fields
       setForm({
         date: new Date().toISOString().split("T")[0],
         gas: "",
@@ -197,7 +258,6 @@ export default function ManagerDashboard() {
         photos: [],
       });
       setShowForm(false);
-      fetchSubmissions();
     } catch (err) {
       toast.error("Failed to submit report");
     }
@@ -208,31 +268,78 @@ export default function ManagerDashboard() {
     navigate("/login");
   };
 
-  useEffect(() => {
-    fetchSubmissions();
-  }, []);
+  // ✅ Business day calculations
+  const businessDayStart = getBusinessDayStart();
+  const prevBusinessDayStart = getPreviousBusinessDayStart();
 
-  const totalSales = submissions.reduce((acc, s) => acc + (s.sales || 0), 0);
-  const totalExpenses = submissions.reduce((acc, s) => acc + (s.expenses || 0), 0);
-  const pendingCount = submissions.filter((s) => s.status === "pending").length;
+  const todaySubmissions = submissions.filter((s) => {
+    const submittedAt = new Date(s.submittedAt);
+    return submittedAt >= businessDayStart;
+  });
+
+  const yesterdaySubmissions = submissions.filter((s) => {
+    const submittedAt = new Date(s.submittedAt);
+    return (
+      submittedAt >= prevBusinessDayStart && submittedAt < businessDayStart
+    );
+  });
+
+  const todaySales = todaySubmissions.reduce(
+    (acc, s) => acc + (s.sales || 0),
+    0,
+  );
+  const todayExpenses = todaySubmissions.reduce(
+    (acc, s) => acc + (s.expenses || 0),
+    0,
+  );
+  const yesterdaySales = yesterdaySubmissions.reduce(
+    (acc, s) => acc + (s.sales || 0),
+    0,
+  );
+  const yesterdayExpenses = yesterdaySubmissions.reduce(
+    (acc, s) => acc + (s.expenses || 0),
+    0,
+  );
+  const pendingCount = todaySubmissions.filter((s) => s.status === "pending").length;
+
   const stationName = userData ? userData.stationName : "";
   const userName = userData ? userData.name : "";
-  const autoTotal = Number(form.gas) + Number(form.petroleum) + Number(form.diesel) + Number(form.kerosene);
+  const autoTotal =
+    Number(form.gas) +
+    Number(form.petroleum) +
+    Number(form.diesel) +
+    Number(form.kerosene);
 
-  const inputClass = "w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white text-sm outline-none focus:border-orange-500 transition placeholder:text-gray-600";
+  const inputClass =
+    "w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white text-sm outline-none focus:border-orange-500 transition placeholder:text-gray-600";
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       {/* Navbar */}
-      <nav className="border-b border-white/5 px-4 md:px-8 py-4 flex justify-between items-center">
+      <motion.nav
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="border-b border-white/5 px-4 md:px-8 py-4 flex justify-between items-center relative"
+      >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
+          <motion.div
+            whileHover={{ rotate: 10, scale: 1.1 }}
+            className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center"
+          >
             <span className="text-white text-xs font-bold">OS</span>
-          </div>
+          </motion.div>
           <span className="text-white font-semibold">Orange Stations</span>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-gray-400 text-sm hidden md:block">{stationName}</span>
+
+        <div className="hidden md:flex items-center gap-4">
+          <span className="text-gray-400 text-sm">{stationName}</span>
+          <button
+            onClick={() => navigate("/manager/history")}
+            className="text-gray-400 text-sm hover:text-white transition"
+          >
+            History
+          </button>
           <button
             onClick={handleLogout}
             className="text-gray-400 text-sm border border-white/10 px-3 py-1.5 rounded-lg hover:text-white transition"
@@ -240,177 +347,462 @@ export default function ManagerDashboard() {
             Logout
           </button>
         </div>
-      </nav>
+
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="md:hidden text-white text-2xl bg-transparent border-none cursor-pointer"
+        >
+          {menuOpen ? "✕" : "☰"}
+        </button>
+
+        <AnimatePresence>
+          {menuOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute top-full right-0 w-48 bg-[#111] border border-white/10 rounded-xl p-3 flex flex-col gap-2 z-50 md:hidden"
+            >
+              <p className="text-gray-500 text-xs px-3 py-1">{stationName}</p>
+              <button
+                onClick={() => {
+                  navigate("/manager/history");
+                  setMenuOpen(false);
+                }}
+                className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5"
+              >
+                History
+              </button>
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setMenuOpen(false);
+                }}
+                className="text-gray-400 text-sm hover:text-white transition text-left px-3 py-2 rounded-lg hover:bg-white/5 border border-white/10"
+              >
+                Logout
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.nav>
 
       <div className="px-4 md:px-8 py-8">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <motion.div
+          variants={fadeUp}
+          initial="hidden"
+          animate="show"
+          className="flex justify-between items-center mb-8"
+        >
           <div>
-            <h1 className="text-white text-2xl font-bold">Welcome, {userName}</h1>
+            <h1 className="text-white text-2xl font-bold">
+              Welcome, {userName}
+            </h1>
             <p className="text-gray-500 text-sm mt-1">{stationName}</p>
           </div>
-          <button
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => setShowForm(!showForm)}
             className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition"
           >
             {showForm ? "Cancel" : "+ Submit Report"}
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {/* Today's Stats */}
+        <motion.div
+          variants={fadeUp}
+          initial="hidden"
+          animate="show"
+          className="mb-2"
+        >
+          <p className="text-gray-500 text-xs uppercase tracking-widest mb-3">
+            Today's Summary
+          </p>
+        </motion.div>
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
+        >
           {[
-            { label: "Total Submissions", value: submissions.length, color: "text-white" },
-            { label: "Total Sales", value: `₦${totalSales.toLocaleString()}`, color: "text-green-400" },
-            { label: "Total Expenses", value: `₦${totalExpenses.toLocaleString()}`, color: "text-red-400" },
+            {
+              label: "Today's Submissions",
+              value: todaySubmissions.length,
+              color: "text-white",
+            },
+            {
+              label: "Today's Sales",
+              value: `₦${todaySales.toLocaleString()}`,
+              color: "text-green-400",
+            },
+            {
+              label: "Today's Expenses",
+              value: `₦${todayExpenses.toLocaleString()}`,
+              color: "text-red-400",
+            },
             { label: "Pending", value: pendingCount, color: "text-yellow-400" },
           ].map((stat, i) => (
-            <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-4">
+            <motion.div
+              key={i}
+              variants={staggerItem}
+              whileHover={{ scale: 1.03, y: -4 }}
+              className="bg-white/5 border border-white/10 rounded-xl p-4"
+            >
               <p className="text-gray-500 text-xs mb-1">{stat.label}</p>
-              <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
-            </div>
+              <p
+                className={`text-base md:text-xl font-bold break-words min-w-0 ${stat.color}`}
+              >
+                {stat.value}
+              </p>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
 
-        {/* Submit Report Form */}
-        {showForm && (
-          <div className="bg-white/5 border border-white/10 rounded-xl p-6 mb-8">
-            <h2 className="text-white font-semibold mb-6">Daily Report</h2>
-
-            {/* Date */}
-            <div className="mb-4">
-              <label className="block text-gray-400 text-xs mb-2">Date</label>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className={inputClass}
-              />
-            </div>
-
-            {/* Gas */}
-            <div className="mb-6">
-              <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-3">Gas</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-400 text-xs mb-2">Gas Sales (₦)</label>
-                  <input type="number" placeholder="0" value={form.gas} onChange={(e) => setForm({ ...form, gas: e.target.value })} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-gray-400 text-xs mb-2">Gas Quantity (kg/L)</label>
-                  <input type="number" placeholder="0" value={form.gasQty} onChange={(e) => setForm({ ...form, gasQty: e.target.value })} className={inputClass} />
-                </div>
-              </div>
-            </div>
-
-            {/* Petroleum */}
-            <div className="mb-6">
-              <p className="text-yellow-400 text-xs font-semibold uppercase tracking-widest mb-3">Petroleum</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-400 text-xs mb-2">Petroleum Sales (₦)</label>
-                  <input type="number" placeholder="0" value={form.petroleum} onChange={(e) => setForm({ ...form, petroleum: e.target.value })} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-gray-400 text-xs mb-2">Petroleum Quantity (L)</label>
-                  <input type="number" placeholder="0" value={form.petroleumQty} onChange={(e) => setForm({ ...form, petroleumQty: e.target.value })} className={inputClass} />
-                </div>
-              </div>
-            </div>
-
-            {/* Diesel */}
-            <div className="mb-6">
-              <p className="text-purple-400 text-xs font-semibold uppercase tracking-widest mb-3">Diesel</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-400 text-xs mb-2">Diesel Sales (₦)</label>
-                  <input type="number" placeholder="0" value={form.diesel} onChange={(e) => setForm({ ...form, diesel: e.target.value })} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-gray-400 text-xs mb-2">Diesel Quantity (L)</label>
-                  <input type="number" placeholder="0" value={form.dieselQty} onChange={(e) => setForm({ ...form, dieselQty: e.target.value })} className={inputClass} />
-                </div>
-              </div>
-            </div>
-
-            {/* Kerosene */}
-            <div className="mb-6">
-              <p className="text-orange-400 text-xs font-semibold uppercase tracking-widest mb-3">Kerosene</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-400 text-xs mb-2">Kerosene Sales (₦)</label>
-                  <input type="number" placeholder="0" value={form.kerosene} onChange={(e) => setForm({ ...form, kerosene: e.target.value })} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-gray-400 text-xs mb-2">Kerosene Quantity (L)</label>
-                  <input type="number" placeholder="0" value={form.keroseneQty} onChange={(e) => setForm({ ...form, keroseneQty: e.target.value })} className={inputClass} />
-                </div>
-              </div>
-            </div>
-
-            {/* Auto Total */}
-            <div className="mb-4">
-              <label className="block text-gray-400 text-xs mb-2">Total Sales (Auto)</label>
-              <div className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-green-400 text-sm font-bold">
-                ₦{autoTotal.toLocaleString()}
-              </div>
-            </div>
-
-            {/* Expenses */}
-            <div className="mb-4">
-              <label className="block text-gray-400 text-xs mb-2">Total Expenses (₦)</label>
-              <input type="number" placeholder="0" value={form.expenses} onChange={(e) => setForm({ ...form, expenses: e.target.value })} className={inputClass} />
-            </div>
-
-            {/* Description */}
-            <div className="mb-4">
-              <label className="block text-gray-400 text-xs mb-2">Description / Notes</label>
-              <textarea placeholder="Describe expenses or any issues..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className={`${inputClass} resize-none`} />
-            </div>
-
-            {/* Photo Upload */}
-            <div className="mt-4">
-              <label className="block text-gray-400 text-xs mb-2">Upload Photos (optional)</label>
-              <input type="file" accept="image/*" multiple onChange={handlePhotoUpload} className="text-gray-400 text-sm" />
-              {uploading && <p className="text-orange-500 text-xs mt-2">Uploading photos...</p>}
-              {form.photos.length > 0 && (
-                <div className="grid grid-cols-4 gap-2 mt-3">
-                  {form.photos.map((url, i) => (
-                    <div key={i} className="relative">
-                      <img src={url} alt={`photo ${i + 1}`} className="w-full h-20 object-cover rounded-lg" />
-                      <button
-                        onClick={() => setForm((prev) => ({ ...prev, photos: prev.photos.filter((_, idx) => idx !== i) }))}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <button onClick={handleSubmit} className="mt-6 bg-orange-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-orange-600 transition">
-              Submit Report
-            </button>
-          </div>
+        {/* Yesterday's Stats */}
+        {(yesterdaySales > 0 || yesterdayExpenses > 0) && (
+          <>
+            <motion.div
+              variants={fadeUp}
+              initial="hidden"
+              animate="show"
+              className="mb-2"
+            >
+              <p className="text-gray-500 text-xs uppercase tracking-widest mb-3">
+                Yesterday
+              </p>
+            </motion.div>
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              animate="show"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8"
+            >
+              <motion.div
+                variants={staggerItem}
+                className="bg-white/5 border border-white/10 rounded-xl p-4"
+              >
+                <p className="text-gray-500 text-xs mb-1">Yesterday's Sales</p>
+                <p className="text-sm md:text-xl font-bold text-green-400/60">
+                  ₦{yesterdaySales.toLocaleString()}
+                </p>
+              </motion.div>
+              <motion.div
+                variants={staggerItem}
+                className="bg-white/5 border border-white/10 rounded-xl p-4"
+              >
+                <p className="text-gray-500 text-xs mb-1">
+                  Yesterday's Expenses
+                </p>
+                <p className="text-sm md:text-xl font-bold text-red-400/60">
+                  ₦{yesterdayExpenses.toLocaleString()}
+                </p>
+              </motion.div>
+            </motion.div>
+          </>
         )}
 
-        {/* Submissions List */}
-        <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-          <h2 className="text-white font-semibold mb-6">Your Submissions</h2>
+        {/* Submit Report Form */}
+        <AnimatePresence>
+          {showForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden mb-8"
+            >
+              <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                <h2 className="text-white font-semibold mb-6">Daily Report</h2>
+
+                <div className="mb-4">
+                  <label className="block text-gray-400 text-xs mb-2">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="mb-6">
+                  <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-3">
+                    Gas
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-gray-400 text-xs mb-2">
+                        Gas Sales (₦)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.gas}
+                        onChange={(e) =>
+                          setForm({ ...form, gas: e.target.value })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-400 text-xs mb-2">
+                        Gas Quantity (kg/L)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.gasQty}
+                        onChange={(e) =>
+                          setForm({ ...form, gasQty: e.target.value })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <p className="text-yellow-400 text-xs font-semibold uppercase tracking-widest mb-3">
+                    Petroleum
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-gray-400 text-xs mb-2">
+                        Petroleum Sales (₦)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.petroleum}
+                        onChange={(e) =>
+                          setForm({ ...form, petroleum: e.target.value })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-400 text-xs mb-2">
+                        Petroleum Quantity (L)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.petroleumQty}
+                        onChange={(e) =>
+                          setForm({ ...form, petroleumQty: e.target.value })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <p className="text-purple-400 text-xs font-semibold uppercase tracking-widest mb-3">
+                    Diesel
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-gray-400 text-xs mb-2">
+                        Diesel Sales (₦)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.diesel}
+                        onChange={(e) =>
+                          setForm({ ...form, diesel: e.target.value })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-400 text-xs mb-2">
+                        Diesel Quantity (L)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.dieselQty}
+                        onChange={(e) =>
+                          setForm({ ...form, dieselQty: e.target.value })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <p className="text-orange-400 text-xs font-semibold uppercase tracking-widest mb-3">
+                    Kerosene
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-gray-400 text-xs mb-2">
+                        Kerosene Sales (₦)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.kerosene}
+                        onChange={(e) =>
+                          setForm({ ...form, kerosene: e.target.value })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-400 text-xs mb-2">
+                        Kerosene Quantity (L)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={form.keroseneQty}
+                        onChange={(e) =>
+                          setForm({ ...form, keroseneQty: e.target.value })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-400 text-xs mb-2">
+                    Total Sales (Auto)
+                  </label>
+                  <div className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-green-400 text-sm font-bold">
+                    ₦{autoTotal.toLocaleString()}
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-400 text-xs mb-2">
+                    Total Expenses (₦)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={form.expenses}
+                    onChange={(e) =>
+                      setForm({ ...form, expenses: e.target.value })
+                    }
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-400 text-xs mb-2">
+                    Description / Notes
+                  </label>
+                  <textarea
+                    placeholder="Describe expenses or any issues..."
+                    value={form.description}
+                    onChange={(e) =>
+                      setForm({ ...form, description: e.target.value })
+                    }
+                    rows={3}
+                    className={`${inputClass} resize-none`}
+                  />
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-gray-400 text-xs mb-2">
+                    Upload Photos (optional)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePhotoUpload}
+                    className="text-gray-400 text-sm"
+                  />
+                  {uploading && (
+                    <p className="text-orange-500 text-xs mt-2">
+                      Uploading photos...
+                    </p>
+                  )}
+                  {form.photos.length > 0 && (
+                    <div className="grid grid-cols-4 gap-2 mt-3">
+                      {form.photos.map((url, i) => (
+                        <div key={i} className="relative">
+                          <img
+                            src={url}
+                            alt={`photo ${i + 1}`}
+                            className="w-full h-20 object-cover rounded-lg"
+                          />
+                          <button
+                            onClick={() =>
+                              setForm((prev) => ({
+                                ...prev,
+                                photos: prev.photos.filter(
+                                  (_, idx) => idx !== i,
+                                ),
+                              }))
+                            }
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleSubmit}
+                  className="mt-6 bg-orange-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-orange-600 transition"
+                >
+                  Submit Report
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Today's Submissions List */}
+        <motion.div
+          variants={fadeUp}
+          initial="hidden"
+          animate="show"
+          className="bg-white/5 border border-white/10 rounded-xl p-6"
+        >
+          <h2 className="text-white font-semibold mb-6">
+            Today's Submissions ({todaySubmissions.length})
+          </h2>
           {loading ? (
-            <p className="text-gray-500 text-sm">Loading...</p>
-          ) : submissions.length === 0 ? (
-            <p className="text-gray-500 text-sm">No submissions yet</p>
+            <motion.p
+              animate={{ opacity: [0.4, 1, 0.4] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              className="text-gray-500 text-sm"
+            >
+              Loading...
+            </motion.p>
+          ) : todaySubmissions.length === 0 ? (
+            <p className="text-gray-500 text-sm">No submissions today yet</p>
           ) : (
-            <div className="flex flex-col gap-3">
-              {submissions.map((sub) => (
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              animate="show"
+              className="flex flex-col gap-3"
+            >
+              {todaySubmissions.map((sub) => (
                 <SubmissionCard key={sub.id} sub={sub} />
               ))}
-            </div>
+            </motion.div>
           )}
-        </div>
+        </motion.div>
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import toast from "react-hot-toast";
 
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -15,6 +17,10 @@ export default function Login() {
   const handleLogin = async () => {
     if (!email || !password) {
       toast.error("Please fill in all fields");
+      return;
+    }
+    if (!isValidEmail(email)) {
+      toast.error("Please enter a valid email address");
       return;
     }
 
@@ -28,7 +34,14 @@ export default function Login() {
       const data = docSnap.data();
       role = data ? data.role : null;
     } catch (err) {
-      toast.error("Invalid email or password");
+      const code = err.code;
+      if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        toast.error("Invalid email or password");
+      } else if (code === "auth/too-many-requests") {
+        toast.error("Too many attempts. Try again later");
+      } else {
+        toast.error("Something went wrong. Please try again");
+      }
       setLoading(false);
       return;
     }
@@ -42,11 +55,8 @@ export default function Login() {
     setLoading(false);
   };
 
-  // ✅ extracted function
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
-      handleLogin();
-    }
+    if (e.key === "Enter") handleLogin();
   };
 
   const inputClass =
@@ -72,17 +82,26 @@ export default function Login() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={handleKeyDown}
                 className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-gray-400 text-xs mb-2">Password</label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-gray-400 text-xs">Password</label>
+                <button
+                  onClick={() => navigate("/forgot-password")}
+                  className="text-xs text-gray-500 hover:text-orange-400 transition"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={handleKeyDown} // ✅ extracted function
+                onKeyDown={handleKeyDown}
                 className={inputClass}
               />
             </div>

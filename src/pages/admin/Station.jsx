@@ -7,6 +7,8 @@ import {
   query,
   where,
   doc,
+  addDoc,
+  deleteDoc,
   getDoc,
   updateDoc,
 } from "firebase/firestore";
@@ -261,17 +263,18 @@ export default function AdminStation() {
     return () => unsubscribe();
   }, [id]);
 
-  const handleClear = async (submissionId) => {
-    try {
-      await updateDoc(doc(db, "submissions", submissionId), {
-        status: "cleared",
-        clearedAt: new Date().toISOString(),
-      });
-      toast.success("Submission cleared!");
-    } catch (err) {
-      toast.error("Failed to clear submission");
-    }
-  };
+ const handleClear = async (submissionId) => {
+  try {
+    await updateDoc(doc(db, "submissions", submissionId), {
+      status: "cleared",
+      clearedAt: new Date().toISOString(),
+    });
+    toast.success("Submission cleared!");
+  } catch (err) {
+    console.error(err); // add this so you can see the real error
+    toast.error("Failed to clear submission");
+  }
+};
 
   const handleUnclear = async (submissionId) => {
     try {

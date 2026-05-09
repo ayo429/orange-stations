@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { Toaster } from 'react-hot-toast';
-import './App.css'
+import './App.css';
 
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
@@ -10,52 +10,48 @@ import AdminStation from './pages/admin/Station';
 import AdminReports from './pages/admin/Reports';
 import ManagerDashboard from './pages/manager/Dashboard';
 import ManagerHistory from './pages/manager/History';
-
-function ProtectedRoute({ children, role }) {
-  const { user, userData } = useAuth();
-  if (!user) return <Navigate to="/login" />;
-  if (role && userData?.role !== role) return <Navigate to="/login" />;
-  return children;
-}
+import ForgotPassword from './pages/ForgotPassword';
+import ProtectedRoute from './components/ProtectedRoutes';
 
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       <Route path="/admin" element={
-        <ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>
+        <ProtectedRoute allowedRole="admin"><AdminDashboard /></ProtectedRoute>
       } />
       <Route path="/admin/managers" element={
-        <ProtectedRoute role="admin"><AdminManagers /></ProtectedRoute>
+        <ProtectedRoute allowedRole="admin"><AdminManagers /></ProtectedRoute>
       } />
       <Route path="/admin/station/:id" element={
-        <ProtectedRoute role="admin"><AdminStation /></ProtectedRoute>
+        <ProtectedRoute allowedRole="admin"><AdminStation /></ProtectedRoute>
       } />
       <Route path="/admin/reports" element={
-        <ProtectedRoute role="admin"><AdminReports /></ProtectedRoute>
+        <ProtectedRoute allowedRole="admin"><AdminReports /></ProtectedRoute>
       } />
 
       <Route path="/manager" element={
-        <ProtectedRoute role="manager"><ManagerDashboard /></ProtectedRoute>
+        <ProtectedRoute allowedRole="manager"><ManagerDashboard /></ProtectedRoute>
       } />
       <Route path="/manager/history" element={
-        <ProtectedRoute role="manager"><ManagerHistory /></ProtectedRoute>
+        <ProtectedRoute allowedRole="manager"><ManagerHistory /></ProtectedRoute>
       } />
 
-      <Route path="*" element={<Navigate to="/login" />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
+    <Router>
+      <AuthProvider>
         <Toaster position="top-right" />
         <AppRoutes />
-      </Router>
-    </AuthProvider>
+      </AuthProvider>
+    </Router>
   );
 }
 

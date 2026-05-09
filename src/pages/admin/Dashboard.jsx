@@ -33,37 +33,25 @@ const staggerItem = {
 
 function useCountUp(target, duration = 1500) {
   const [count, setCount] = useState(0);
-
   useEffect(() => {
-    if (target === 0) {
-      setCount(0);
-      return;
-    }
+    if (target === 0) { setCount(0); return; }
     const steps = 60;
     const increment = target / steps;
     const interval = duration / steps;
     let current = 0;
     const timer = setInterval(() => {
       current += increment;
-      if (current >= target) {
-        setCount(target);
-        clearInterval(timer);
-      } else {
-        setCount(Math.floor(current));
-      }
+      if (current >= target) { setCount(target); clearInterval(timer); }
+      else { setCount(Math.floor(current)); }
     }, interval);
     return () => clearInterval(timer);
   }, [target, duration]);
-
   return count;
 }
 
 function StatCard({ label, value, prefix = "", color }) {
   const animated = useCountUp(typeof value === "number" ? value : 0);
-  const display = typeof value === "number"
-    ? `${prefix}${animated.toLocaleString()}`
-    : value;
-
+  const display = typeof value === "number" ? `${prefix}${animated.toLocaleString()}` : value;
   return (
     <motion.div
       variants={staggerItem}
@@ -71,12 +59,34 @@ function StatCard({ label, value, prefix = "", color }) {
       className="bg-white/5 border border-white/10 rounded-xl p-4 cursor-default"
     >
       <p className="text-gray-500 text-xs mb-1">{label}</p>
-      <p className={`text-sm md:text-xl font-bold break-words min-w-0 ${color}`}>
-        {display}
-      </p>
+      <p className={`text-sm md:text-xl font-bold break-words min-w-0 ${color}`}>{display}</p>
     </motion.div>
   );
 }
+
+// ✅ 11am business day helpers
+const getBusinessDayStart = () => {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(11, 0, 0, 0); // 11:00 AM today
+
+  // If before 11am, business day started at 11am yesterday
+  if (now < start) {
+    start.setDate(start.getDate() - 1);
+  }
+  return start;
+};
+
+const getPreviousBusinessDayStart = () => {
+  const current = getBusinessDayStart();
+  const prev = new Date(current);
+  prev.setDate(prev.getDate() - 1);
+  return prev;
+};
+
+const getPreviousBusinessDayEnd = () => {
+  return getBusinessDayStart();
+};
 
 export default function AdminDashboard() {
   const { userData, logout } = useAuth();
@@ -89,23 +99,19 @@ export default function AdminDashboard() {
   const [showClearModal, setShowClearModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // ✅ Fetch managers once
   const fetchManagers = async () => {
     setManagersLoading(true);
-    let managersData = [];
     try {
       const managersSnap = await getDocs(
         query(collection(db, "users"), where("role", "==", "manager"))
       );
-      managersData = managersSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setManagers(managersSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
     } catch (err) {
       toast.error("Failed to load managers");
     }
-    setManagers(managersData);
     setManagersLoading(false);
   };
 
-  // ✅ Real-time listener for submissions
   useEffect(() => {
     fetchManagers();
 
@@ -129,14 +135,8 @@ export default function AdminDashboard() {
   const autoArchive = async (submissionsData) => {
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-
-    const toArchive = submissionsData.filter((s) => {
-      const subDate = new Date(s.date);
-      return subDate < threeMonthsAgo;
-    });
-
+    const toArchive = submissionsData.filter((s) => new Date(s.date) < threeMonthsAgo);
     if (toArchive.length === 0) return;
-
     try {
       for (const sub of toArchive) {
         await addDoc(collection(db, "archive"), {
@@ -190,10 +190,38 @@ export default function AdminDashboard() {
     navigate("/login");
   };
 
-  const totalSales = submissions.reduce((acc, s) => acc + (s.sales || 0), 0);
-  const totalExpenses = submissions.reduce((acc, s) => acc + (s.expenses || 0), 0);
+  // ✅ Business day boundaries
+  const businessDayStart = getBusinessDayStart();
+  const prevBusinessDayStart = getPreviousBusinessDayStart();
+  const prevBusinessDayEnd = getPreviousBusinessDayEnd();
+
+  // ✅ Today's submissions — submitted after 11am today (or after 11am yesterday if before 11am now)
+  const todaySubmissions = submissions.filter((s) => {
+    const submittedAt = new Date(s.submittedAt);
+    return submittedAt >= businessDayStart;
+  });
+
+  // ✅ Yesterday's submissions — submitted between 11am yesterday and 11am today
+  const yesterdaySubmissions = submissions.filter((s) => {
+    const submittedAt = new Date(s.submittedAt);
+    return submittedAt >= prevBusinessDayStart && submittedAt < prevBusinessDayEnd;
+  });
+
+  const todaySales = todaySubmissions.reduce((acc, s) => acc + (s.sales || 0), 0);
+  const todayExpenses = todaySubmissions.reduce((acc, s) => acc + (s.expenses || 0), 0);
+  const yesterdaySales = yesterdaySubmissions.reduce((acc, s) => acc + (s.sales || 0), 0);
+  const yesterdayExpenses = yesterdaySubmissions.reduce((acc, s) => acc + (s.expenses || 0), 0);
+
   const pendingCount = submissions.filter((s) => s.status === "pending").length;
   const userName = userData ? userData.name : "";
+
+  // ✅ Today's date label
+  const todayLabel = businessDayStart.toLocaleDateString("en-NG", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -216,18 +244,12 @@ export default function AdminDashboard() {
 
         <div className="hidden md:flex items-center gap-4">
           <span className="text-gray-400 text-sm">Welcome, {userName}</span>
-          <button
-            onClick={handleLogout}
-            className="text-gray-400 text-sm border border-white/10 px-3 py-1.5 rounded-lg hover:text-white transition"
-          >
+          <button onClick={handleLogout} className="text-gray-400 text-sm border border-white/10 px-3 py-1.5 rounded-lg hover:text-white transition">
             Logout
           </button>
         </div>
 
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          className="md:hidden text-white text-2xl bg-transparent border-none cursor-pointer"
-        >
+        <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden text-white text-2xl bg-transparent border-none cursor-pointer">
           {menuOpen ? "✕" : "☰"}
         </button>
 
@@ -274,23 +296,65 @@ export default function AdminDashboard() {
           </motion.button>
         </motion.div>
 
-        {/* Stats */}
+        {/* Today's Stats */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
           </div>
         ) : (
-          <motion.div
-            variants={staggerContainer}
-            initial="hidden"
-            animate="show"
-            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8"
-          >
-            <StatCard label="Total Stations" value={managers.length} color="text-orange-500" />
-            <StatCard label="Total Sales" value={totalSales} prefix="₦" color="text-green-400" />
-            <StatCard label="Total Expenses" value={totalExpenses} prefix="₦" color="text-red-400" />
-            <StatCard label="Pending Reviews" value={pendingCount} color="text-yellow-400" />
-          </motion.div>
+          <>
+            {/* Today */}
+            <motion.div variants={fadeUp} initial="hidden" animate="show" className="mb-2">
+              <p className="text-gray-500 text-xs uppercase tracking-widest mb-3">
+                Today — {todayLabel}
+              </p>
+            </motion.div>
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              animate="show"
+              className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8"
+            >
+              <StatCard label="Total Stations" value={managers.length} color="text-orange-500" />
+              <StatCard label="Today's Sales" value={todaySales} prefix="₦" color="text-green-400" />
+              <StatCard label="Today's Expenses" value={todayExpenses} prefix="₦" color="text-red-400" />
+              <StatCard label="Pending Reviews" value={pendingCount} color="text-yellow-400" />
+            </motion.div>
+
+            {/* Yesterday */}
+            {(yesterdaySales > 0 || yesterdayExpenses > 0) && (
+              <>
+                <motion.div variants={fadeUp} initial="hidden" animate="show" className="mb-2">
+                  <p className="text-gray-500 text-xs uppercase tracking-widest mb-3">Yesterday</p>
+                </motion.div>
+                <motion.div
+                  variants={staggerContainer}
+                  initial="hidden"
+                  animate="show"
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8"
+                >
+                  <motion.div
+                    variants={staggerItem}
+                    className="bg-white/5 border border-white/10 rounded-xl p-4"
+                  >
+                    <p className="text-gray-500 text-xs mb-1">Yesterday's Sales</p>
+                    <p className="text-sm md:text-xl font-bold text-green-400/60">
+                      ₦{yesterdaySales.toLocaleString()}
+                    </p>
+                  </motion.div>
+                  <motion.div
+                    variants={staggerItem}
+                    className="bg-white/5 border border-white/10 rounded-xl p-4"
+                  >
+                    <p className="text-gray-500 text-xs mb-1">Yesterday's Expenses</p>
+                    <p className="text-sm md:text-xl font-bold text-red-400/60">
+                      ₦{yesterdayExpenses.toLocaleString()}
+                    </p>
+                  </motion.div>
+                </motion.div>
+              </>
+            )}
+          </>
         )}
 
         {/* Navigation Cards */}
@@ -341,12 +405,8 @@ export default function AdminDashboard() {
               className="flex flex-col gap-3"
             >
               {managers.map((manager) => {
-                const managerSubmissions = submissions.filter(
-                  (s) => s.managerId === manager.id
-                );
-                const pending = managerSubmissions.filter(
-                  (s) => s.status === "pending"
-                ).length;
+                const managerSubmissions = submissions.filter((s) => s.managerId === manager.id);
+                const pending = managerSubmissions.filter((s) => s.status === "pending").length;
 
                 return (
                   <motion.div
@@ -410,15 +470,11 @@ export default function AdminDashboard() {
               className="bg-[#111] border border-white/10 rounded-2xl p-6 w-full max-w-md"
             >
               <h2 className="text-white font-bold text-lg mb-2">Clear History</h2>
-              <p className="text-gray-500 text-sm mb-6">
-                Choose what you want to clear. This action cannot be undone.
-              </p>
+              <p className="text-gray-500 text-sm mb-6">Choose what you want to clear. This action cannot be undone.</p>
               <div className="flex flex-col gap-3 mb-6">
                 <div className="bg-white/5 border border-white/10 rounded-xl p-4">
                   <h3 className="text-white text-sm font-semibold mb-1">Clear Archived Submissions</h3>
-                  <p className="text-gray-500 text-xs mb-3">
-                    Deletes submissions older than 3 months that have been archived. Current submissions are kept.
-                  </p>
+                  <p className="text-gray-500 text-xs mb-3">Deletes submissions older than 3 months. Current submissions are kept.</p>
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -431,9 +487,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
                   <h3 className="text-red-400 text-sm font-semibold mb-1">Clear All Submissions</h3>
-                  <p className="text-gray-500 text-xs mb-3">
-                    Permanently deletes ALL submissions including current ones. This cannot be undone!
-                  </p>
+                  <p className="text-gray-500 text-xs mb-3">Permanently deletes ALL submissions. This cannot be undone!</p>
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
